@@ -15,29 +15,51 @@ const ignoredDiagnostics = new Set<number>([
 ]);
 
 // List of diagnostic codes which should be ignored inside `expectError` statements
-const expectErrordiagnosticCodesToIgnore = new Set<DiagnosticCode>([
+const expectErrorDiagnosticCodesToIgnore = new Set<DiagnosticCode>([
 	DiagnosticCode.ArgumentTypeIsNotAssignableToParameterType,
 	DiagnosticCode.PropertyDoesNotExistOnType,
 	DiagnosticCode.CannotAssignToReadOnlyProperty,
 	DiagnosticCode.TypeIsNotAssignableToOtherType,
 	DiagnosticCode.TypeDoesNotSatisfyTheConstraint,
 	DiagnosticCode.GenericTypeRequiresTypeArguments,
+	DiagnosticCode.GenericTypeRequiresBetweenXAndYTypeArugments,
 	DiagnosticCode.ExpectedArgumentsButGotOther,
 	DiagnosticCode.ExpectedAtLeastArgumentsButGotOther,
 	DiagnosticCode.NoOverloadExpectsCountOfArguments,
 	DiagnosticCode.NoOverloadExpectsCountOfTypeArguments,
 	DiagnosticCode.NoOverloadMatches,
+	DiagnosticCode.Type1IsMissingPropertiesFromType2Variant1,
+	DiagnosticCode.Type1IsMissingPropertiesFromType2Variant2,
 	DiagnosticCode.PropertyMissingInType1ButRequiredInType2,
 	DiagnosticCode.TypeHasNoPropertiesInCommonWith,
 	DiagnosticCode.ThisContextOfTypeNotAssignableToMethodOfThisType,
 	DiagnosticCode.ValueOfTypeNotCallable,
 	DiagnosticCode.ExpressionNotCallable,
+	DiagnosticCode.TypeNotAssignableWithExactOptionalPropertyTypes,
+	DiagnosticCode.TypeNotAssignableToParameterWithExactOptionalPropertyTypes,
+	DiagnosticCode.TypeNotAssignableTypeOfTargetWithExactOptionalPropertyTypes,
+	DiagnosticCode.IndexSignatureOnlyPermitsReading,
 	DiagnosticCode.OnlyVoidFunctionIsNewCallable,
 	DiagnosticCode.ExpressionNotConstructable,
 	DiagnosticCode.NewExpressionTargetLackingConstructSignatureHasAnyType,
 	DiagnosticCode.MemberCannotHaveOverrideModifierBecauseItIsNotDeclaredInBaseClass,
 	DiagnosticCode.MemberMustHaveOverrideModifier,
 	DiagnosticCode.StringLiteralTypeIsNotAssignableToUnionTypeWithSuggestion,
+	DiagnosticCode.ObjectLiteralMayOnlySpecifyKnownProperties,
+	DiagnosticCode.ObjectLiteralMayOnlySpecifyKnownProperties2,
+	DiagnosticCode.UnableToResolveSignatureOfClassDecorator,
+	DiagnosticCode.UnableToResolveSignatureOfParameterDecorator,
+	DiagnosticCode.UnableToResolveSignatureOfPropertyDecorator,
+	DiagnosticCode.UnableToResolveSignatureOfMethodDecorator,
+	DiagnosticCode.DecoratorCanOnlyDecorateMethodImplementation,
+	DiagnosticCode.DecoratorFunctionReturnTypeNotAssignableToType,
+	DiagnosticCode.DecoratorFunctionReturnTypeExpectedToBeVoidOrAny,
+	DiagnosticCode.RuntimeWillInvokeDecoratorWithXArgumentsButDecoratorExpectsY,
+	DiagnosticCode.RuntimeWillInvokeDecoratorWithXArgumentsButDecoratorExpectsAtLeastY,
+	DiagnosticCode.AcceptsTooFewArgumentsToBeUsedAsDecoratorHere,
+	DiagnosticCode.PropertyDoesNotExistOnTypeDidYouMean,
+	DiagnosticCode.ErrorIsOfTypeUnknown,
+	DiagnosticCode.TwoDifferentTypesSameName,
 ]);
 
 type IgnoreDiagnosticResult = 'preserve' | 'ignore' | Location;
@@ -60,19 +82,28 @@ const ignoreDiagnostic = (
 		return 'ignore';
 	}
 
-	if (!expectErrordiagnosticCodesToIgnore.has(diagnostic.code)) {
-		return 'preserve';
-	}
-
 	// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 	const diagnosticFileName = diagnostic.file!.fileName;
 
-	for (const [location] of expectedErrors) {
+	for (const [location, error] of expectedErrors) {
 		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 		const start = diagnostic.start!;
 
+		// Diagnostic is inside of `expectError` clause
 		if (diagnosticFileName === location.fileName && start > location.start && start < location.end) {
-			return location;
+			if (expectErrorDiagnosticCodesToIgnore.has(diagnostic.code)) {
+				return location;
+			}
+
+			// Ignore syntactical errors
+			if (diagnostic.code < 2000) {
+				expectedErrors.delete(location);
+				return 'preserve';
+			}
+
+			// Set diagnostic code on `ExpectedError` to log
+			error.code = diagnostic.code;
+			return 'preserve';
 		}
 	}
 
@@ -136,9 +167,13 @@ export const getDiagnostics = (context: Context): Diagnostic[] => {
 	}
 
 	for (const [, diagnostic] of expectedErrors) {
+		const message = diagnostic.code ?
+			`Found an error that tsd does not currently support (\`ts${diagnostic.code}\`), consider creating an issue on GitHub.` :
+			'Expected an error, but found none.';
+
 		diagnostics.push({
 			...diagnostic,
-			message: 'Expected an error, but found none.',
+			message,
 			severity: 'error'
 		});
 	}

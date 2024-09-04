@@ -2,14 +2,18 @@ import path from 'path';
 import test from 'ava';
 import {verify, verifyWithFileName} from './fixtures/utils';
 import tsd from '..';
-import {Diagnostic} from '../lib/interfaces';
+import {Diagnostic, TsdError} from '../lib/interfaces';
 
 test('throw if no type definition was found', async t => {
-	await t.throwsAsync(tsd({cwd: path.join(__dirname, 'fixtures/no-tsd')}), {message: 'The type definition `index.d.ts` does not exist. Create one and try again.'});
+	const cwd = path.join(__dirname, 'fixtures/no-tsd');
+	const index = path.join(cwd, 'index.d.ts');
+
+	await t.throwsAsync(tsd({cwd}), {message: `The type definition \`index.d.ts\` does not exist at \`${index}\`. Is the path correct? Create one and try again.`});
 });
 
 test('throw if no test is found', async t => {
-	await t.throwsAsync(tsd({cwd: path.join(__dirname, 'fixtures/no-test')}), {message: 'The test file `index.test-d.ts` or `index.test-d.tsx` does not exist. Create one and try again.'});
+	const cwd = path.join(__dirname, 'fixtures/no-test');
+	await t.throwsAsync(tsd({cwd}), {message: `The test file \`index.test-d.ts\` or \`index.test-d.tsx\` does not exist in \`${cwd}\`. Create one and try again.`});
 });
 
 test('return diagnostics', async t => {
@@ -138,6 +142,30 @@ test('allow specifying a lib in tsconfig.json', async t => {
 	verify(t, diagnostics, []);
 });
 
+test('use moduleResolution `nodenext` when module is `nodenext` in tsconfig.json', async t => {
+	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/module-resolution/nodenext-from-tsconfig-json')});
+
+	verify(t, diagnostics, []);
+});
+
+test('use moduleResolution `nodenext` when module is `nodenext` in package.json', async t => {
+	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/module-resolution/nodenext-from-package-json')});
+
+	verify(t, diagnostics, []);
+});
+
+test('use moduleResolution `node16` when module is `node16` in tsconfig.json', async t => {
+	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/module-resolution/node16-from-tsconfig-json')});
+
+	verify(t, diagnostics, []);
+});
+
+test('use moduleResolution `node16` when module is `node16` in package.json', async t => {
+	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/module-resolution/node16-from-package-json')});
+
+	verify(t, diagnostics, []);
+});
+
 test('add support for esm with esModuleInterop', async t => {
 	const diagnostics = await tsd({
 		cwd: path.join(__dirname, 'fixtures/esm')
@@ -236,51 +264,6 @@ test('support setting a custom test directory', async t => {
 	]);
 });
 
-test('expectError for classes', async t => {
-	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/expect-error/classes')});
-
-	verify(t, diagnostics, []);
-});
-
-test('expectError for functions', async t => {
-	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/expect-error/functions')});
-
-	verify(t, diagnostics, [
-		[5, 0, 'error', 'Expected an error, but found none.']
-	]);
-});
-
-test('expectError for generics', async t => {
-	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/expect-error/generics')});
-
-	verify(t, diagnostics, []);
-});
-
-test('expectError should not ignore syntactical errors', async t => {
-	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/expect-error/syntax')});
-
-	verify(t, diagnostics, [
-		[4, 29, 'error', '\')\' expected.'],
-		[5, 22, 'error', '\',\' expected.'],
-		[4, 0, 'error', 'Expected an error, but found none.'],
-		[5, 0, 'error', 'Expected an error, but found none.']
-	]);
-});
-
-test('expectError for values', async t => {
-	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/expect-error/values')});
-
-	verify(t, diagnostics, [
-		[5, 0, 'error', 'Expected an error, but found none.']
-	]);
-});
-
-test('expectError for values (noImplicitAny disabled)', async t => {
-	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/expect-error/values-disabled-no-implicit-any')});
-
-	verify(t, diagnostics, []);
-});
-
 test('missing import', async t => {
 	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/missing-import')});
 
@@ -341,7 +324,8 @@ test('specify test files manually', async t => {
 	const diagnostics = await tsd({
 		cwd: path.join(__dirname, 'fixtures/specify-test-files'),
 		testFiles: [
-			'unknown.test.ts'
+			'unknown.test.ts',
+			'second.test.ts'
 		]
 	});
 
@@ -351,12 +335,14 @@ test('specify test files manually', async t => {
 });
 
 test('fails if typings file is not found in the specified path', async t => {
+	const cwd = path.join(__dirname, 'fixtures/typings-custom-dir');
+
 	const error = await t.throwsAsync(tsd({
-		cwd: path.join(__dirname, 'fixtures/typings-custom-dir'),
+		cwd,
 		typingsFile: 'unknown.d.ts'
 	}));
 
-	t.is(error.message, 'The type definition `unknown.d.ts` does not exist. Create one and try again.');
+	t.is(error.message, `The type definition \`unknown.d.ts\` does not exist at \`${path.join(cwd, 'unknown.d.ts')}\`. Is the path correct? Create one and try again.`);
 });
 
 test('includes extended config files along with found ones', async t => {
@@ -418,16 +404,37 @@ test('allow specifying `rootDir` option in `tsconfig.json`', async t => {
 	verify(t, diagnostics, []);
 });
 
-test('prints the types of expressions passed to `printType` helper', async t => {
-	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/print-type')});
+test('assertions should be identified if imported as an aliased module', async t => {
+	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/aliased/aliased-module')});
 
-	verify(t, diagnostics, [
-		[4, 0, 'warning', 'Type for expression `aboveZero` is: `(foo: number) => number | null`'],
-		[5, 0, 'warning', 'Type for expression `null` is: `null`'],
-		[6, 0, 'warning', 'Type for expression `undefined` is: `undefined`'],
-		[7, 0, 'warning', 'Type for expression `null as any` is: `any`'],
-		[8, 0, 'warning', 'Type for expression `null as never` is: `never`'],
-		[9, 0, 'warning', 'Type for expression `null as unknown` is: `unknown`'],
-		[10, 0, 'warning', 'Type for expression `\'foo\'` is: `"foo"`'],
-	]);
+	verify(t, diagnostics, []);
+});
+
+test('assertions should be identified if imported as an alias', async t => {
+	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/aliased/aliased-assertion')});
+
+	verify(t, diagnostics, []);
+});
+
+test('assertions should be identified if aliased', async t => {
+	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/aliased/aliased-const')});
+
+	verify(t, diagnostics, []);
+});
+
+test('parsing undefined symbol should not fail', async t => {
+	const diagnostics = await tsd({cwd: path.join(__dirname, 'fixtures/undefined-symbol')});
+
+	verify(t, diagnostics, []);
+});
+
+test('custom tsd errors are created correctly', t => {
+	const tsdError = t.throws<TsdError>(() => {
+		throw new TsdError('foo');
+	});
+
+	t.true(tsdError instanceof Error);
+	t.true(tsdError instanceof TsdError);
+	t.is(tsdError.name, 'TsdError');
+	t.is(tsdError.message, 'foo');
 });

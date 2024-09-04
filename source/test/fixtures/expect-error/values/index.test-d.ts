@@ -1,5 +1,5 @@
 import {expectError} from '../../../..';
-import {default as one, atLeastOne, foo, getFoo, HasKey, hasProperty, MyClass, Options, triggerSuggestion} from '.';
+import {default as one, atLeastOne, foo, getFoo, HasKey, hasProperty, MyClass, Options, triggerSuggestion, ReadonlyKeys} from '.';
 
 expectError<string>(1);
 expectError<string>('fo');
@@ -13,7 +13,9 @@ try {
 		expectError(foo.bar = 'quux');
 		expectError(foo.quux);
 	}
-} catch {}
+} catch (error) {
+	expectError(error.code);
+}
 
 expectError(hasProperty({name: 1}));
 
@@ -37,3 +39,14 @@ expectError(new hasProperty({name: 'foo'}));
 expectError(() => {
 	triggerSuggestion.fooOrBar = 'fooo';
 })
+
+expectError(triggerSuggestion.fooOrBars);
+
+expectError(() => {
+    const foo: ReadonlyKeys = {
+		bar: 'baz',
+	};
+
+	// ts2542 - trying to modify readonly key
+	foo.bar = 'bar';
+});

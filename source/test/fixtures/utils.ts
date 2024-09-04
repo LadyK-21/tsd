@@ -17,6 +17,17 @@ type ExpectationWithFileName = [
 	fileName: string,
 ];
 
+type ExpectationWithDiff = [
+	line: number,
+	column: number,
+	severity: 'error' | 'warning',
+	message: string,
+	diff: {
+		expected: string;
+		received: string;
+	}
+];
+
 /**
  * Verify a list of diagnostics.
  *
@@ -73,4 +84,55 @@ export const verifyWithFileName = (
 	}));
 
 	t.deepEqual(diagnosticObjs, expectationObjs, 'Received diagnostics that are different from expectations!');
+};
+
+/**
+ * Verify a list of diagnostics including diff.
+ *
+ * @param t - The AVA execution context.
+ * @param cwd - The working directory as passed to `tsd`.
+ * @param diagnostics - List of diagnostics to verify.
+ * @param expectations - Expected diagnostics.
+ */
+export const verifyWithDiff = (
+	t: ExecutionContext,
+	diagnostics: Diagnostic[],
+	expectations: ExpectationWithDiff[]
+) => {
+	const diagnosticObjs = diagnostics.map(({line, column, severity, message, diff}) => ({
+		line,
+		column,
+		severity,
+		message,
+		diff
+	}));
+
+	const expectationObjs = expectations.map(([line, column, severity, message, diff]) => ({
+		line,
+		column,
+		severity,
+		message,
+		diff,
+	}));
+
+	t.deepEqual(diagnosticObjs, expectationObjs, 'Received diagnostics that are different from expectations!');
+};
+
+/**
+ * Verify a list of diagnostics reported from the CLI.
+ *
+ * @param t - The AVA execution context.
+ * @param diagnostics - List of diagnostics to verify.
+ * @param expectations - Expected diagnostics.
+ * @param startLine - Optionally specify how many lines to skip from start.
+ */
+export const verifyCli = (
+	t: ExecutionContext,
+	diagnostics: string,
+	expectedLines: string[],
+	{startLine}: {startLine: number} = {startLine: 1} // Skip file location.
+) => {
+	const receivedLines = diagnostics.trim().split('\n').slice(startLine).map(line => line.trim());
+
+	t.deepEqual(receivedLines, expectedLines, 'Received diagnostics that are different from expectations!');
 };

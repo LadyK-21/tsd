@@ -27,19 +27,30 @@ export default (pkg: PackageJsonWithTsdConfig, cwd: string): Config => {
 		cwd
 	);
 
+	const combinedCompilerOptions = {
+		...tsConfigCompilerOptions,
+		...packageJsonCompilerOptions,
+	};
+
+	const module = combinedCompilerOptions.module ?? ModuleKind.CommonJS;
+
 	return {
 		directory: 'test-d',
 		...pkgConfig,
 		compilerOptions: {
 			strict: true,
 			jsx: JsxEmit.React,
-			lib: parseRawLibs(['es2017', 'dom', 'dom.iterable'], cwd),
-			module: ModuleKind.CommonJS,
-			target: ScriptTarget.ES2017,
+			lib: parseRawLibs(['es2020', 'dom', 'dom.iterable'], cwd),
+			module,
+			target: ScriptTarget.ES2020,
 			esModuleInterop: true,
-			...tsConfigCompilerOptions,
-			...packageJsonCompilerOptions,
-			moduleResolution: ModuleResolutionKind.NodeJs,
+			noUnusedLocals: false,
+			...combinedCompilerOptions,
+			moduleResolution: module === ModuleKind.NodeNext ?
+				ModuleResolutionKind.NodeNext :
+				module === ModuleKind.Node16 ?
+					ModuleResolutionKind.Node16 :
+					ModuleResolutionKind.NodeJs,
 			skipLibCheck: false
 		}
 	};
